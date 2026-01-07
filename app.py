@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 
 # 1. Page Configuration
-# layout="wide" is crucial for mobile to use the full screen width
 st.set_page_config(
     page_title="ගම්මාන දත්ත පද්ධතිය",
     page_icon="🏘️",
@@ -18,15 +17,12 @@ def load_data():
         df = pd.read_csv("data_coop.csv", encoding='utf-8')
 
         # --- DATA CLEANING ---
-        # Ensure 'Village' column exists and clean it
         if 'Village' in df.columns:
             df['Village'] = df['Village'].astype(str).str.strip()
 
-        # Fix formatting for Serial Numbers
         if 'SirialNo' in df.columns:
             df['SirialNo'] = df['SirialNo'].astype(str).str.replace(r'\.0$', '', regex=True)
 
-        # Fill missing values
         df = df.fillna("")
         return df
 
@@ -43,73 +39,131 @@ df = load_data()
 
 # 3. Main App Layout
 if not df.empty:
-    # App Title
     st.title("🏘️ සාමාජික තොරතුරු")
 
-    # --- SIDEBAR: VILLAGE SELECTION ---
+    # --- SIDEBAR CONTROLS ---
     with st.sidebar:
-        st.header("තේරීම් කරන්න")
+        st.header("සැකසුම් (Settings)")
 
-        # Get unique, sorted list of villages
-        village_list = sorted(df['Village'].unique().tolist())
-
-        # Placeholder option
-        placeholder_text = "--- තෝරන්න (Select) ---"
-        village_list.insert(0, placeholder_text)
-
-        # Selectbox
-        selected_village = st.selectbox(
-            "ගම්මානය (Village):",
-            options=village_list,
-            index=0
+        # --- MODE SWITCHER ---
+        mode = st.radio(
+            "ක්‍රමවේදය තෝරන්න (Select Mode):",
+            ["තනි (Single)", "බහු (Multi)"],
+            index=0,
+            horizontal=True
         )
 
         st.write("---")
-        st.caption("Developed for Co-op Data Management")
+
+        # Get list of villages
+        village_list = sorted(df['Village'].unique().tolist())
+
+        # Initialize variables
+        selected_single = None
+        selected_multi = []
+
+        # --- CONDITIONAL INPUTS ---
+        if mode == "තනි (Single)":
+            # SINGLE MODE
+            placeholder_text = "--- තෝරන්න (Select) ---"
+            village_list_with_ph = [placeholder_text] + village_list
+
+            selected_single = st.selectbox(
+                "ගම්මානය:",
+                options=village_list_with_ph,
+                index=0
+            )
+        else:
+            # MULTI MODE
+            selected_multi = st.multiselect(
+                "ගම්මාන (Villages):",
+                options=village_list,
+                placeholder="ගම්මාන එකතු කරන්න..."
+            )
+
+            if len(selected_multi) > 0:
+                if st.button("තේරීම් ඉවත් කරන්න (Clear)"):
+                    selected_multi = []
+
+        st.write("---")
+        st.caption("Developed by **Kavindu Herath**")
+        st.caption("For Co-op Data Management")
 
     # --- MAIN CONTENT LOGIC ---
 
-    # Check if a village is selected
-    if selected_village == placeholder_text:
-        # --- MOBILE FRIENDLY INSTRUCTION ---
-        # On mobile, the sidebar is hidden. We must tell them to open it.
-        st.info("👈 **ආරම්භ කිරීමට:**")
-        st.markdown("""
-        1. ** ජංගම දුරකථන (Mobile):** ඉහළ වම් කෙළවරේ ඇති ඊතලය **( > )** ඔබා මෙනුව ලබාගන්න.
-        2. ** පරිගණක (Laptop):** වම්පස මෙනුවෙන් ගම්මානය තෝරන්න.
-        """)
+    # 1. LOGIC: SINGLE MODE
+    if mode == "තනි (Single)":
+        if selected_single == placeholder_text:
+            st.info("👈 **ආරම්භ කිරීමට:**")
+            st.markdown("""
+            **ජංගම දුරකථන (Mobile):** ඉහළ වම් කෙළවරේ ඇති ඊතලය **( > )** ඔබා මෙනුවෙන් **ගම්මානයක්** තෝරන්න.
+            """)
+            st.metric(label="මුළු සාමාජිකයින් (System Total)", value=len(df))
+        else:
+            filtered_data = df[df['Village'] == selected_single]
 
-        # Show total count as a quick stat
-        st.metric(label="මුළු සාමාජිකයින් (All Members)", value=len(df))
+            st.subheader(f"📍 {selected_single}")
+            st.caption(f"සාමාජිකයින් ගණන: {len(filtered_data)}")
 
+            st.dataframe(
+                filtered_data,
+                use_container_width=True,
+                hide_index=True,
+                height=500,
+                column_config={
+                    "SirialNo": st.column_config.TextColumn("අංකය", width="small"),
+                    "MemberNo": st.column_config.TextColumn("සා.අංකය", width="small"),
+                    "NIC": "ජා.හැ. අංකය",
+                    "Name": "නම",
+                    "Address": "ලිපිනය",
+                    "Gender": "ස්ත්‍රී/පුරු",
+                    "Village": None
+                }
+            )
+
+    # 2. LOGIC: MULTI MODE (UPDATED)
     else:
-        # Filter Data
-        filtered_data = df[df['Village'] == selected_village]
+        if not selected_multi:
+            st.info("👈 **බහු-තේරීම් (Multi Mode):**")
+            st.write("මෙනුවෙන් (Sidebar) ඔබට අවශ්‍ය **ගම්මාන කිහිපයක්** එකතු කරගන්න.")
+            st.metric(label="මුළු සාමාජිකයින් (System Total)", value=len(df))
+        else:
+            # Filter Data
+            filtered_data = df[df['Village'].isin(selected_multi)]
 
-        # Use columns to stack nicely on mobile
-        # On mobile, these will appear one after another
-        st.markdown("---")
-        st.subheader(f"📍 {selected_village}")
-        st.caption(f"සාමාජිකයින් ගණන: {len(filtered_data)}")
+            # --- NEW: Calculate Individual Counts ---
+            # This creates a count of how many members in each selected village
+            village_counts = filtered_data['Village'].value_counts()
 
-        # --- MOBILE OPTIMIZED TABLE ---
-        # use_container_width=True ensures it fills the phone screen
-        # Users can scroll horizontally to see Address/NIC
-        st.dataframe(
-            filtered_data,
-            use_container_width=True,
-            hide_index=True,
-            height=500,  # Fixed height makes scrolling easier on mobile
-            column_config={
-                "SirialNo": st.column_config.TextColumn("අංකය", width="small"),
-                "MemberNo": st.column_config.TextColumn("සා.අංකය", width="small"),
-                "NIC": "ජා.හැ. අංකය",
-                "Name": "නම",
-                "Address": "ලිපිනය",
-                "Gender": "ස්ත්‍රී/පුරු",
-                "Village": None  # Hide Village as it's repetitive
-            }
-        )
+            # 1. Show Grand Total Prominently
+            st.subheader(f"📊 මුළු එකතුව (Total Sum): {len(filtered_data)}")
+
+            # 2. Show Breakdown (List of Counts)
+            # using an expander keeps it clean on mobile, but 'expanded=True' keeps it open
+            with st.expander("විස්තරාත්මක ගණන් බැලීම් (View Counts)", expanded=True):
+                for village in selected_multi:
+                    # Get count safely, default to 0 if empty
+                    count = village_counts.get(village, 0)
+                    st.write(f"🔹 **{village}**: {count}")
+
+            st.markdown("---")
+
+            # Table
+            st.dataframe(
+                filtered_data,
+                use_container_width=True,
+                hide_index=True,
+                height=500,
+                column_config={
+                    "SirialNo": st.column_config.TextColumn("අංකය", width="small"),
+                    "MemberNo": st.column_config.TextColumn("සා.අංකය", width="small"),
+                    "NIC": "ජා.හැ. අංකය",
+                    "Name": "නම",
+                    "Address": "ලිපිනය",
+                    "Gender": "ස්ත්‍රී/පුරු",
+                    "Village": st.column_config.TextColumn("ගම්මානය", width="medium")
+                }
+            )
 
 else:
     st.info("දත්ත පූරණය වෙමින් පවතී... (Waiting for data)")
